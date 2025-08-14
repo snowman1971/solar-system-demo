@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Solar System Simulation v8.3</title>
+<title>Solar System Simulation v8.4</title>
 <style>
 html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
 #ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:220px;}
@@ -19,10 +19,10 @@ button{display:block; margin-top:5px; width:100%;}
   <label>Speed: <input type="range" id="speedSlider" min="0" max="10" value="5" step="0.1"></label>
   <label>Distance Compression / Zoom: <input type="range" id="distSlider" min="0.05" max="2" value="0.5" step="0.01"></label>
   <label>Trail Length: <input type="range" id="trailSlider" min="10" max="200" value="50" step="1"></label>
-  <button id="toggleTilt">Toggle Tilt Control</button>
+  <button id="toggleTilt">Tilt OFF (Pan ON)</button>
   <button id="resetView">Reset View</button>
 </div>
-<div id="versionLabel">v8.3</div>
+<div id="versionLabel">v8.4</div>
 <div id="compressionLabel"></div>
 <div id="infoBox" class="info-box"></div>
 
@@ -48,6 +48,7 @@ let lastDist=0, lastMidX=0, lastMidY=0;
 let infoBox, compressionLabel;
 let maxOrbit;
 let lastMouseY=0;
+let isDragging=false, dragStartX=0, dragStartY=0, camStartX=0, camStartY=0;
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
@@ -57,12 +58,17 @@ function setup(){
   infoBox=select('#infoBox');
   compressionLabel=select('#compressionLabel');
 
-  select('#toggleTilt').mousePressed(()=> tiltControl=!tiltControl);
+  select('#toggleTilt').mousePressed(toggleTilt);
   select('#resetView').mousePressed(resetView);
 
   maxOrbit=planets[planets.length-1].a;
   for(let p of planets) trails[p.name]=[];
   for(let i=0;i<1500;i++) stars.push({x:random(-width,width),y:random(-height,height),r:random(1,2)});
+}
+
+function toggleTilt(){
+  tiltControl=!tiltControl;
+  select('#toggleTilt').html(tiltControl ? 'Tilt ON' : 'Tilt OFF (Pan ON)');
 }
 
 function windowResized(){resizeCanvas(windowWidth,windowHeight);}
@@ -86,9 +92,9 @@ function draw(){
   let trailLength=trailSlider.value();
 
   let scaleFactor=min(width,height)/2 / maxOrbit * compression;
-
   compressionLabel.html(`Distance compression: ${compression.toFixed(2)}x`);
 
+  let hoverPlanet=null;
   for(let p of planets){
     let t=frameCount*speedMult*(365/p.period)*0.05;
     p.angle=t;
@@ -117,30 +123,53 @@ function draw(){
 
     let mx=(mouseX-width/2)/zoomLevel+camX;
     let my=(mouseY-height/2*0.9)/zoomLevel+camY;
-    let d=dist(mx,my,x,y);
-    if(d<p.radius*4){ // Hover detection
-      infoBox.html(`<strong>${p.name}</strong><br>Radius: ${p.radius*1000} km approx<br>Distance: ${p.a} million km<br>Orbital period: ${p.period} days<br>${p.facts}`);
-      infoBox.position(mouseX+10, mouseY+10);
-      infoBox.style('display','block');
-    }
+    if(dist(mx,my,x,y)<p.radius*4){ hoverPlanet=p; }
   }
-  if(planets.every(p=>dist((mouseX-width/2)/zoomLevel+camX,(mouseY-height/2*0.9)/zoomLevel+camY,p.a*cos(p.angle),p.a*sin(p.angle)*tiltFactor)>p.radius*4)){
-    infoBox.style('display','none');
-  }
+
+  if(hoverPlanet){
+    infoBox.html(`<strong>${hoverPlanet.name}</strong><br>Radius: ${hoverPlanet.radius*1000} km approx<br>Distance: ${hoverPlanet.a} million km<br>Orbital period: ${hoverPlanet.period} days<br>${hoverPlanet.facts}`);
+    infoBox.position(mouseX+10, mouseY+10);
+    infoBox.style('display','block');
+  } else { infoBox.style('display','none'); }
 }
 
 // Mouse wheel zoom
 function mouseWheel(event){
-  if(mouseX>220) { // ignore UI
-    let zoomChange=(event.delta>0)?0.95:1.05;
-    let mouseXWorld=(mouseX-width/2)/zoomLevel+camX;
-    let mouseYWorld=(mouseY-height/2*0.9)/zoomLevel+camY;
-    targetZoom*=zoomChange;
-    targetZoom=constrain(targetZoom,0.2,5);
-    targetX=mouseXWorld-(mouseX-width/2)/targetZoom;
-    targetY=mouseYWorld-(mouseY-height/2*0.9)/targetZoom;
+  if(mouseX>220) return; // ignore UI
+  let zoomChange=(event.delta>0)?0.95:1.05;
+  let mouseXWorld=(mouseX-width/2)/zoomLevel+camX;
+  let mouseYWorld=(mouseY-height/2*0.9)/zoomLevel+camY;
+  targetZoom*=zoomChange;
+  targetZoom=constrain(targetZoom,0.2,5);
+  targetX=mouseXWorld-(mouseX-width/2)/targetZoom;
+  targetY=mouseYWorld-(mouseY-height/2*0.9)/targetZoom;
+}
+
+// Dragging / tilt
+function mousePressed(){
+  if(mouseX>220) return; // ignore UI
+  isDragging=true;
+  dragStartX=mouseX;
+  dragStartY=mouseY;
+  camStartX=targetX;
+  camStartY=targetY;
+}
+
+function mouseDragged(){
+  if(mouseX>220) return;
+  if(!isDragging) return;
+  let dx=(mouseX-dragStartX)/zoomLevel;
+  let dy=(mouseY-dragStartY)/zoomLevel;
+  if(tiltControl){
+    tiltFactor+=dy*0.005;
+    tiltFactor=constrain(tiltFactor,0.1,1);
+  } else {
+    targetX=camStartX-dx;
+    targetY=camStartY-dy;
   }
 }
+
+function mouseReleased(){ isDragging=false; }
 
 // Touch controls
 function touchMoved(event){
@@ -157,28 +186,22 @@ function touchMoved(event){
       targetZoom=constrain(targetZoom,0.2,5);
       targetX=worldX-(midX-width/2)/targetZoom;
       targetY=worldY-(midY-height/2*0.9)/targetZoom;
-
-      let dx=(midX-lastMidX)/zoomLevel;
-      let dy=(midY-lastMidY)/zoomLevel;
-      targetX-=dx; targetY-=dy;
-
-      if(tiltControl){ tiltFactor+=dy*0.005; tiltFactor=constrain(tiltFactor,0.1,1);}
     }
     lastDist=d; lastMidX=midX; lastMidY=midY;
-  } else if(touches.length==1 && tiltControl){
-    let dy=touches[0].y - lastMouseY;
-    tiltFactor+=dy*0.005;
-    tiltFactor=constrain(tiltFactor,0.1,1);
+  } else if(touches.length==1){
+    let dy=touches[0].y-lastMouseY;
+    let dx=touches[0].x-lastMouseY;
+    if(tiltControl){
+      tiltFactor+=dy*0.005;
+      tiltFactor=constrain(tiltFactor,0.1,1);
+    } else {
+      targetX-=dx/zoomLevel; targetY-=dy/zoomLevel;
+    }
     lastMouseY=touches[0].y;
   }
 }
 function touchEnded(){ lastDist=0; lastMidX=0; lastMidY=0; lastMouseY=0; }
 
-function mouseDragged(){ 
-  if(mouseX>220) { 
-    if(tiltControl){ let dy=mouseY-pmouseY; tiltFactor+=dy*0.005; tiltFactor=constrain(tiltFactor,0.1,1); }
-  }
-}
 </script>
 </body>
 </html>
