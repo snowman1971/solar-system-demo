@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Solar System Simulation v8.4</title>
+<title>Solar System Simulation v8.5</title>
 <style>
 html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
 #ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:220px;}
@@ -22,7 +22,7 @@ button{display:block; margin-top:5px; width:100%;}
   <button id="toggleTilt">Tilt OFF (Pan ON)</button>
   <button id="resetView">Reset View</button>
 </div>
-<div id="versionLabel">v8.4</div>
+<div id="versionLabel">v8.5</div>
 <div id="compressionLabel"></div>
 <div id="infoBox" class="info-box"></div>
 
@@ -47,7 +47,6 @@ let tiltFactor=0.5, tiltControl=false;
 let lastDist=0, lastMidX=0, lastMidY=0;
 let infoBox, compressionLabel;
 let maxOrbit;
-let lastMouseY=0;
 let isDragging=false, dragStartX=0, dragStartY=0, camStartX=0, camStartY=0;
 
 function setup(){
@@ -189,19 +188,19 @@ function touchMoved(event){
     }
     lastDist=d; lastMidX=midX; lastMidY=midY;
   } else if(touches.length==1){
-    let dy=touches[0].y-lastMouseY;
-    let dx=touches[0].x-lastMouseY;
+    let dx=touches[0].x-pmouseX;
+    let dy=touches[0].y-pmouseY;
     if(tiltControl){
       tiltFactor+=dy*0.005;
       tiltFactor=constrain(tiltFactor,0.1,1);
     } else {
       targetX-=dx/zoomLevel; targetY-=dy/zoomLevel;
     }
-    lastMouseY=touches[0].y;
   }
 }
-function touchEnded(){ lastDist=0; lastMidX=0; lastMidY=0; lastMouseY=0; }
+function touchEnded(){ lastDist=0; lastMidX=0; lastMidY=0; }
 
 </script>
 </body>
 </html>
+
