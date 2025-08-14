@@ -2,53 +2,82 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Solar System Simulation</title>
+<title>Solar System Simulation - Tilted 3D with Info</title>
 <style>
   html, body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: sans-serif;}
   #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;}
   label { display:block; margin: 5px 0; }
+  .info-box {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    pointer-events: none;
+    font-size: 12px;
+    max-width: 180px;
+  }
 </style>
 </head>
 <body>
 <div id="ui">
-  <label>Speed: <input type="range" id="speedSlider" min="0.1" max="5" value="1" step="0.1"></label>
+  <label>Speed: <input type="range" id="speedSlider" min="0" max="10" value="5" step="0.1"></label>
   <label>Distance Compression: <input type="range" id="distSlider" min="0.1" max="1" value="0.5" step="0.01"></label>
   <label>Trail Length: <input type="range" id="trailSlider" min="10" max="200" value="50" step="1"></label>
 </div>
+<div id="infoBox" class="info-box" style="display:none;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
 <script>
 let planets = [
-  {name:"Mercury", color:"#a9a9a9", a:57.9, e:0.205, radius:4, angle:0, period:88},
-  {name:"Venus", color:"#f5deb3", a:108.2, e:0.007, radius:7, angle:0, period:224.7},
-  {name:"Earth", color:"#1e90ff", a:149.6, e:0.017, radius:8, angle:0, period:365.2},
-  {name:"Mars", color:"#ff4500", a:227.9, e:0.094, radius:6, angle:0, period:687},
-  {name:"Jupiter", color:"#ffa500", a:778.6, e:0.049, radius:14, angle:0, period:4331},
-  {name:"Saturn", color:"#f0e68c", a:1433.5, e:0.056, radius:12, angle:0, period:10747},
-  {name:"Uranus", color:"#7fffd4", a:2872.5, e:0.046, radius:10, angle:0, period:30589},
-  {name:"Neptune", color:"#4169e1", a:4495.1, e:0.010, radius:10, angle:0, period:59800}
+  {name:"Mercury", color:"#a9a9a9", a:57.9, e:0.205, radius:4, period:88,
+   facts:"Mercury is the smallest planet and closest to the Sun."},
+  {name:"Venus", color:"#f5deb3", a:108.2, e:0.007, radius:7, period:224.7,
+   facts:"Venus spins backward, so the Sun rises in the west."},
+  {name:"Earth", color:"#1e90ff", a:149.6, e:0.017, radius:8, period:365.2,
+   facts:"Earth is the only planet known to support life."},
+  {name:"Mars", color:"#ff4500", a:227.9, e:0.094, radius:6, period:687,
+   facts:"Mars has the tallest volcano in the solar system, Olympus Mons."},
+  {name:"Jupiter", color:"#ffa500", a:778.6, e:0.049, radius:14, period:4331,
+   facts:"Jupiter is the largest planet and has a giant storm called the Great Red Spot."},
+  {name:"Saturn", color:"#f0e68c", a:1433.5, e:0.056, radius:12, period:10747,
+   facts:"Saturn's rings are made mostly of ice particles."},
+  {name:"Uranus", color:"#7fffd4", a:2872.5, e:0.046, radius:10, period:30589,
+   facts:"Uranus rotates on its side, making extreme seasons."},
+  {name:"Neptune", color:"#4169e1", a:4495.1, e:0.010, radius:10, period:59800,
+   facts:"Neptune has the strongest winds in the solar system."}
 ];
 
 let trails = [];
 let speedSlider, distSlider, trailSlider;
 let scaleFactor, maxOrbit;
+let tiltAngle = 0;
+let infoBox;
+
 function setup(){
   createCanvas(windowWidth, windowHeight);
   speedSlider = select('#speedSlider');
   distSlider = select('#distSlider');
   trailSlider = select('#trailSlider');
+  infoBox = select('#infoBox');
   maxOrbit = Math.max(...planets.map(p=>p.a));
   scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value();
   for(let p of planets){ trails[p.name] = [];}
 }
 
-function windowResized(){ resizeCanvas(windowWidth, windowHeight); scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value(); }
+function windowResized(){ 
+  resizeCanvas(windowWidth, windowHeight); 
+  scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value(); 
+}
 
 function draw(){
-  background(0, 20); // faint fading for trails
+  background(0, 20); 
   translate(width/2, height/2*0.9);
-  let speed = speedSlider.value();
+  let speedMult = speedSlider.value()/5;
   scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value();
+
+  tiltAngle += 0.001; // slow rotation for angled 3D
+  rotate(tiltAngle);
 
   // Draw Sun
   noStroke();
@@ -57,14 +86,12 @@ function draw(){
   drawingContext.shadowBlur = 30;
   drawingContext.shadowColor = "#ff0";
 
-  rotateXFrame(PI/6); // angled perspective
-
   for(let p of planets){
-    let t = frameCount*speed*0.01*(365/p.period);
+    let t = frameCount * speedMult * (365/p.period) * 0.05; 
     p.angle = t;
     let r = p.a*(1-p.e*p.e)/(1+p.e*cos(p.angle));
     let x = r*cos(p.angle)*scaleFactor;
-    let y = r*sin(p.angle)*scaleFactor*0.6; // compress vertical for angled view
+    let y = r*sin(p.angle)*scaleFactor*0.6; 
 
     // Update trails
     trails[p.name].push([x,y]);
@@ -95,12 +122,24 @@ function draw(){
     textSize(12);
     textAlign(CENTER);
     text(p.name, x, y - p.radius*2);
-  }
-}
 
-// Simple pseudo rotate for angled effect
-function rotateXFrame(angle){
-  rotate(angle*0.1); // subtle rotation to add 3D-ish feeling
+    // Detect clicks/taps for info pop-up
+    if(mouseIsPressed){
+      let mx = mouseX - width/2;
+      let my = mouseY - height/2*0.9;
+      let d = dist(mx,my,x,y);
+      if(d<p.radius*2){
+        infoBox.html(`<strong>${p.name}</strong><br>Radius: ${p.radius*1000} km approx<br>Distance: ${p.a} million km<br>Orbital period: ${p.period} days<br>${p.facts}`);
+        infoBox.position(mouseX + 10, mouseY + 10);
+        infoBox.style('display','block');
+      }
+    }
+  }
+
+  // Hide info if mouse not pressed
+  if(!mouseIsPressed){
+    infoBox.style('display','none');
+  }
 }
 </script>
 </body>
