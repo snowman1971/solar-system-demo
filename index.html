@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Solar System Simulation v8.6</title>
+<title>Solar System Simulation v8.7</title>
 <style>
 html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
 #ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:220px;}
@@ -22,7 +22,7 @@ button{display:block; margin-top:5px; width:100%;}
   <button id="toggleTilt">Tilt OFF (Pan ON)</button>
   <button id="resetView">Reset View</button>
 </div>
-<div id="versionLabel">v8.6</div>
+<div id="versionLabel">v8.7</div>
 <div id="compressionLabel"></div>
 <div id="infoBox" class="info-box"></div>
 
@@ -48,6 +48,7 @@ let tiltFactor=0.5, tiltControl=false;
 let infoBox, compressionLabel;
 let maxOrbit;
 let isDragging=false, dragStart={x:0,y:0}, camStart={x:0,y:0};
+let lastDist=0;
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
@@ -79,7 +80,6 @@ function draw(){
   noStroke(); fill(255);
   for(let s of stars) ellipse(s.x,s.y,s.r);
 
-  // Smooth camera motion
   camera.x += (targetCamera.x - camera.x)*0.1;
   camera.y += (targetCamera.y - camera.y)*0.1;
   camera.zoom += (targetCamera.zoom - camera.zoom)*0.1;
@@ -128,7 +128,6 @@ function draw(){
   }
   pop();
 
-  // Hover info box
   if(hoverPlanet){
     infoBox.html(`<strong>${hoverPlanet.name}</strong><br>Radius: ${hoverPlanet.radius*1000} km approx<br>Distance: ${hoverPlanet.a} million km<br>Orbital period: ${hoverPlanet.period} days<br>${hoverPlanet.facts}`);
     infoBox.position(mouseX+10, mouseY+10);
@@ -138,15 +137,14 @@ function draw(){
 
 // Mouse wheel zoom
 function mouseWheel(event){
-  if(mouseX<220){ // Ignore UI
-    let factor = (event.delta>0)?0.95:1.05;
-    let worldX=(mouseX-width/2)/camera.zoom + camera.x;
-    let worldY=(mouseY-height/2*0.9)/camera.zoom + camera.y;
-    targetCamera.zoom *= factor;
-    targetCamera.zoom=constrain(targetCamera.zoom,0.2,5);
-    targetCamera.x=worldX-(mouseX-width/2)/targetCamera.zoom;
-    targetCamera.y=worldY-(mouseY-height/2*0.9)/targetCamera.zoom;
-  }
+  if(mouseX>220) return;
+  let factor=(event.delta>0)?0.95:1.05;
+  let worldX=(mouseX-width/2)/camera.zoom+camera.x;
+  let worldY=(mouseY-height/2*0.9)/camera.zoom+camera.y;
+  targetCamera.zoom*=factor;
+  targetCamera.zoom=constrain(targetCamera.zoom,0.2,5);
+  targetCamera.x=worldX-(mouseX-width/2)/targetCamera.zoom;
+  targetCamera.y=worldY-(mouseY-height/2*0.9)/targetCamera.zoom;
 }
 
 // Dragging / tilt
@@ -158,8 +156,7 @@ function mousePressed(){
 }
 
 function mouseDragged(){
-  if(mouseX>220) return;
-  if(!isDragging) return;
+  if(mouseX>220 || !isDragging) return;
   let dx=(mouseX-dragStart.x)/camera.zoom;
   let dy=(mouseY-dragStart.y)/camera.zoom;
   if(tiltControl){
@@ -174,7 +171,6 @@ function mouseDragged(){
 function mouseReleased(){ isDragging=false; }
 
 // Touch controls
-let lastDist=0;
 function touchMoved(event){
   event.preventDefault();
   if(touches.length==2){
@@ -182,7 +178,7 @@ function touchMoved(event){
     let midX=(touches[0].x+touches[1].x)/2;
     let midY=(touches[0].y+touches[1].y)/2;
     if(lastDist>0){
-      let factor = 1 + (d - lastDist)*0.002;
+      let factor=1+(d-lastDist)*0.002;
       let worldX=(midX-width/2)/camera.zoom+camera.x;
       let worldY=(midY-height/2*0.9)/camera.zoom+camera.y;
       targetCamera.zoom*=factor;
@@ -203,6 +199,7 @@ function touchMoved(event){
     }
   }
 }
+
 function touchEnded(){ lastDist=0; }
 </script>
 </body>
