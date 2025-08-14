@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Solar System Simulation v8.7</title>
+<title>Solar System Simulation v8.8</title>
 <style>
 html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
 #ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:220px;}
@@ -22,7 +22,7 @@ button{display:block; margin-top:5px; width:100%;}
   <button id="toggleTilt">Tilt OFF (Pan ON)</button>
   <button id="resetView">Reset View</button>
 </div>
-<div id="versionLabel">v8.7</div>
+<div id="versionLabel">v8.8</div>
 <div id="compressionLabel"></div>
 <div id="infoBox" class="info-box"></div>
 
@@ -137,7 +137,6 @@ function draw(){
 
 // Mouse wheel zoom
 function mouseWheel(event){
-  if(mouseX>220) return;
   let factor=(event.delta>0)?0.95:1.05;
   let worldX=(mouseX-width/2)/camera.zoom+camera.x;
   let worldY=(mouseY-height/2*0.9)/camera.zoom+camera.y;
@@ -149,14 +148,14 @@ function mouseWheel(event){
 
 // Dragging / tilt
 function mousePressed(){
-  if(mouseX>220) return;
+  if(mouseX>220) return; // avoid UI
   isDragging=true;
   dragStart={x:mouseX, y:mouseY};
   camStart={x:targetCamera.x, y:targetCamera.y};
 }
 
 function mouseDragged(){
-  if(mouseX>220 || !isDragging) return;
+  if(!isDragging || mouseX>220) return;
   let dx=(mouseX-dragStart.x)/camera.zoom;
   let dy=(mouseY-dragStart.y)/camera.zoom;
   if(tiltControl){
@@ -194,12 +193,11 @@ function touchMoved(event){
       tiltFactor+=dy*0.005;
       tiltFactor=constrain(tiltFactor,0.1,1);
     } else {
-      targetCamera.x-=dx/camera.zoom; 
+      targetCamera.x-=dx/camera.zoom;
       targetCamera.y-=dy/camera.zoom;
     }
   }
 }
-
 function touchEnded(){ lastDist=0; }
 </script>
 </body>
