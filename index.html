@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Solar System Simulation - Tilted 3D with Info</title>
+<title>Solar System Simulation - Interactive Zoom</title>
 <style>
-  html, body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: sans-serif;}
+  html, body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif;}
   #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;}
-  label { display:block; margin: 5px 0; }
+  label { display:block; margin: 5px 0; color: #fff;}
   .info-box {
     position: absolute;
     background: rgba(0,0,0,0.8);
@@ -15,14 +15,14 @@
     border-radius: 6px;
     pointer-events: none;
     font-size: 12px;
-    max-width: 180px;
+    max-width: 200px;
   }
 </style>
 </head>
 <body>
 <div id="ui">
   <label>Speed: <input type="range" id="speedSlider" min="0" max="10" value="5" step="0.1"></label>
-  <label>Distance Compression: <input type="range" id="distSlider" min="0.1" max="1" value="0.5" step="0.01"></label>
+  <label>Distance Compression / Zoom: <input type="range" id="distSlider" min="0.05" max="5" value="0.5" step="0.01"></label>
   <label>Trail Length: <input type="range" id="trailSlider" min="10" max="200" value="50" step="1"></label>
 </div>
 <div id="infoBox" class="info-box" style="display:none;"></div>
@@ -30,29 +30,25 @@
 <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
 <script>
 let planets = [
-  {name:"Mercury", color:"#a9a9a9", a:57.9, e:0.205, radius:4, period:88,
-   facts:"Mercury is the smallest planet and closest to the Sun."},
-  {name:"Venus", color:"#f5deb3", a:108.2, e:0.007, radius:7, period:224.7,
-   facts:"Venus spins backward, so the Sun rises in the west."},
-  {name:"Earth", color:"#1e90ff", a:149.6, e:0.017, radius:8, period:365.2,
-   facts:"Earth is the only planet known to support life."},
-  {name:"Mars", color:"#ff4500", a:227.9, e:0.094, radius:6, period:687,
-   facts:"Mars has the tallest volcano in the solar system, Olympus Mons."},
-  {name:"Jupiter", color:"#ffa500", a:778.6, e:0.049, radius:14, period:4331,
-   facts:"Jupiter is the largest planet and has a giant storm called the Great Red Spot."},
-  {name:"Saturn", color:"#f0e68c", a:1433.5, e:0.056, radius:12, period:10747,
-   facts:"Saturn's rings are made mostly of ice particles."},
-  {name:"Uranus", color:"#7fffd4", a:2872.5, e:0.046, radius:10, period:30589,
-   facts:"Uranus rotates on its side, making extreme seasons."},
-  {name:"Neptune", color:"#4169e1", a:4495.1, e:0.010, radius:10, period:59800,
-   facts:"Neptune has the strongest winds in the solar system."}
+  {name:"Mercury", color:"#a9a9a9", a:57.9, e:0.205, radius:4, period:88, facts:"Mercury is the smallest planet and closest to the Sun."},
+  {name:"Venus", color:"#f5deb3", a:108.2, e:0.007, radius:7, period:224.7, facts:"Venus spins backward, so the Sun rises in the west."},
+  {name:"Earth", color:"#1e90ff", a:149.6, e:0.017, radius:8, period:365.2, facts:"Earth is the only planet known to support life."},
+  {name:"Mars", color:"#ff4500", a:227.9, e:0.094, radius:6, period:687, facts:"Mars has the tallest volcano in the solar system, Olympus Mons."},
+  {name:"Jupiter", color:"#ffa500", a:778.6, e:0.049, radius:14, period:4331, facts:"Jupiter is the largest planet and has a giant storm called the Great Red Spot."},
+  {name:"Saturn", color:"#f0e68c", a:1433.5, e:0.056, radius:12, period:10747, facts:"Saturn's rings are made mostly of ice particles."},
+  {name:"Uranus", color:"#7fffd4", a:2872.5, e:0.046, radius:10, period:30589, facts:"Uranus rotates on its side, making extreme seasons."},
+  {name:"Neptune", color:"#4169e1", a:4495.1, e:0.010, radius:10, period:59800, facts:"Neptune has the strongest winds in the solar system."}
 ];
 
 let trails = [];
 let speedSlider, distSlider, trailSlider;
 let scaleFactor, maxOrbit;
-let tiltAngle = 0;
 let infoBox;
+let stars = [];
+let camX = 0, camY = 0;
+let targetX = 0, targetY = 0;
+let zoomLevel = 1;
+let targetZoom = 1;
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
@@ -63,46 +59,54 @@ function setup(){
   maxOrbit = Math.max(...planets.map(p=>p.a));
   scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value();
   for(let p of planets){ trails[p.name] = [];}
+  for(let i=0;i<500;i++){
+    stars.push({x:random(-width/2,width/2), y:random(-height/2,height/2), r:random(1,2)});
+  }
 }
 
 function windowResized(){ 
   resizeCanvas(windowWidth, windowHeight); 
-  scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value(); 
 }
 
 function draw(){
-  background(0, 20); 
+  background(0); 
+  noStroke();
+  fill(255);
+  for(let s of stars){
+    ellipse(s.x, s.y, s.r);
+  }
+
+  // Smooth pan and zoom
+  camX += (targetX - camX) * 0.05;
+  camY += (targetY - camY) * 0.05;
+  zoomLevel += (targetZoom - zoomLevel) * 0.05;
+
   translate(width/2, height/2*0.9);
+  scale(zoomLevel);
+  translate(-camX, -camY);
+
   let speedMult = speedSlider.value()/5;
   scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value();
 
-  tiltAngle += 0.001; // slow rotation for angled 3D
-  rotate(tiltAngle);
-
-  // Draw Sun
+  // Sun
   noStroke();
   fill(255, 204, 0);
   ellipse(0,0,30,30);
-  drawingContext.shadowBlur = 30;
-  drawingContext.shadowColor = "#ff0";
 
   for(let p of planets){
-    let t = frameCount * speedMult * (365/p.period) * 0.05; 
+    let t = frameCount * speedMult * (365/p.period) * 0.05;
     p.angle = t;
     let r = p.a*(1-p.e*p.e)/(1+p.e*cos(p.angle));
     let x = r*cos(p.angle)*scaleFactor;
-    let y = r*sin(p.angle)*scaleFactor*0.6; 
+    let y = r*sin(p.angle)*scaleFactor*0.5; // Y compression for tilt
 
-    // Update trails
     trails[p.name].push([x,y]);
     if(trails[p.name].length>trailSlider.value()) trails[p.name].shift();
 
-    // Draw orbit path faintly
     noFill();
     stroke(255,30);
-    ellipse(0,0,p.a*2*scaleFactor, p.a*2*scaleFactor*0.6);
+    ellipse(0,0,p.a*2*scaleFactor, p.a*2*scaleFactor*0.5);
 
-    // Draw trails
     noFill();
     beginShape();
     for(let i=0;i<trails[p.name].length;i++){
@@ -112,35 +116,63 @@ function draw(){
     }
     endShape();
 
-    // Draw planet
     noStroke();
     fill(p.color);
     ellipse(x,y,p.radius*2,p.radius*2);
 
-    // Draw label
     fill(255);
-    textSize(12);
+    textSize(12/zoomLevel);
     textAlign(CENTER);
     text(p.name, x, y - p.radius*2);
 
-    // Detect clicks/taps for info pop-up
+    // Click/tap for info
     if(mouseIsPressed){
-      let mx = mouseX - width/2;
-      let my = mouseY - height/2*0.9;
+      let mx = (mouseX - width/2)/zoomLevel + camX;
+      let my = (mouseY - height/2*0.9)/zoomLevel + camY;
       let d = dist(mx,my,x,y);
       if(d<p.radius*2){
         infoBox.html(`<strong>${p.name}</strong><br>Radius: ${p.radius*1000} km approx<br>Distance: ${p.a} million km<br>Orbital period: ${p.period} days<br>${p.facts}`);
         infoBox.position(mouseX + 10, mouseY + 10);
         infoBox.style('display','block');
+
+        // Set target to center on planet and zoom in
+        targetX = x;
+        targetY = y;
+        targetZoom = 2;
       }
     }
   }
 
-  // Hide info if mouse not pressed
   if(!mouseIsPressed){
     infoBox.style('display','none');
+    // Optional: return to default zoom/pan slowly
+    targetX = 0;
+    targetY = 0;
+    targetZoom = 1;
   }
 }
+
+// Mouse wheel for zoom (desktop)
+function mouseWheel(event){
+  targetZoom *= event.delta > 0 ? 0.95 : 1.05;
+  targetZoom = constrain(targetZoom, 0.1, 5);
+}
+
+// Touch pinch zoom (mobile)
+let lastDist = 0;
+function touchMoved(){
+  if(touches.length == 2){
+    let d = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+    if(lastDist > 0){
+      let factor = d/lastDist;
+      targetZoom *= factor;
+      targetZoom = constrain(targetZoom, 0.1, 5);
+    }
+    lastDist = d;
+    return false;
+  }
+}
+function touchEnded(){ lastDist = 0; }
 </script>
 </body>
 </html>
