@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Solar System — Kepler Orbits (Portable)</title>
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --fg: #e8eefc;
+    --muted: #8ea0c8;
+    --accent: #66e0ff;
+    --panel: #111729;
+    --panel2:#0f1526;
+  }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+  #wrap { display:grid; grid-template-rows:auto 1fr; height:100%; }
+  #ui {
+    display:flex; gap:12px; flex-wrap:wrap; align-items:center;
+    padding:10px 12px; background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border-bottom:1px solid #1a2340; position:sticky; top:0; z-index:2;
+  }
+  .chip {
+    background:#121b33; border:1px solid #1f2a4d; color:var(--fg);
+    padding:8px 10px; border-radius:12px; display:flex; align-items:center; gap:8px;
+    box-shadow:0 6px 16px rgba(0,0,0,0.25);
+  }
+  .chip label { font-size:13px; color:var(--muted); }
+  .chip input[type=range] { accent-color:var(--accent); width:160px; }
+  .chip button, .chip select {
+    background:#0f1730; color:var(--fg); border:1px solid #27325e; border-radius:10px;
+    padding:6px 10px; font-size:13px;
+  }
+  .chip button:hover { border-color:#3d4f92; }
+  #legend {
+    margin-left:auto; display:flex; gap:12px; align-items:center; color:var(--muted);
+    font-size:12px; opacity:.9;
+  }
+  #canvas { width:100%; height:100%; display:block; touch-action:none; background: radial-gradient(1200px 800px at 50% 60%, #0d1326 0%, #0a0f1f 60%, #070b16 100%); }
+  .badge {
+    position:fixed; left:12px; bottom:10px; background:#0e1630cc; backdrop-filter: blur(6px);
+    border:1px solid #23315f; color:#c8d6ff; padding:8px 10px; border-radius:10px; font-size:12px;
+  }
+  .hint {
+    position:fixed; right:12px; bottom:10px; background:#0e1630cc; border:1px solid #23315f;
+    color:#c8d6ff; padding:8px 10px; border-radius:10px; font-size:12px;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="ui">
+    <div class="chip">
+      <label>Speed</label>
+      <input id="speed" type="range" min="0" max="50" step="0.5" value="8">
+      <span id="speedVal">8×</span>
+    </div>
+    <div class="chip">
+      <label>Distance Mode</label>
+      <select id="mode">
+        <option value="true">True scale</option>
+        <option value="compressed" selected>Compressed (nonlinear)</option>
+        <option value="auto">Auto fit</option>
+      </select>
+      <label>Compression</label>
+      <input id="compress" type="range" min="0.35" max="1" step="0.01" value="0.62" />
+    </div>
+    <div class="chip">
+      <button id="pause">⏸︎ Pause</button>
+      <button id="fs">⤢ Fullscreen</button>
+      <button id="reset">↺ Reset View</button>
+    </div>
+    <div id="legend">
+      <span id="scaleAU">Scale: …</span>
+      <span id="modeNote">Distances compressed to fit screen.</span>
+    </div>
+  </div>
+  <canvas id="canvas"></canvas>
+</div>
+
+<div class="badge" id="followBadge">Following: Sun — tap a planet name to follow it</div>
+<div class="hint">Tip: Click/tap a planet (or its label) to center the view on it. Tap “Sun” to reset.</div>
+
+<script>
+/* ========= Data & Helpers ========= */
+
+// Basic Keplerian two-body model per planet (around the Sun).
+// Values are approximate J2000 elements for demonstration.
+// a = semi-major axis (AU), e = eccentricity, P = sidereal period (days).
+// For orientation/wow: small inclinations used with a simple 3D tilt.
+// (Not rendering true Ω/ω/i; this is a planar view with a subtle tilt for depth.)
+const PLANETS = [
+  { name:"Mercury", a:0.387098, e:0.2056, P:87.969, color:"#b0b0b0", size:5 },
+  { name:"Venus",   a:0.723332, e:0.0068, P:224.701, color:"#e6d47d", size:7 },
+  { name:"Earth",   a:1.000000, e:0.0167, P:365.256, color:"#3fa7d6", size:8 },
+  { name:"Mars",    a:1.523679, e:0.0934, P:686.980, color:"#d66f3f", size:7 },
+  { name:"Jupiter", a:5.20260,  e:0.0489, P:4332.59, color:"#d9b47c", size:14 },
+  { name:"Saturn",  a:9.55490,  e:0.0565, P:10759.22, color:"#f4e2b0", size:12, rings:true },
+  { name:"Uranus",  a:19.2184,  e:0.0463, P:30685.4, color:"#a6e7e3", size:11 },
+  { name:"Neptune", a:30.1104,  e:0.0095, P:60189.0, color:"#4464d6", size:11 }
+];
+
+// Convert degrees to radians
+const DEG = Math.PI / 180;
+
+// Canvas & context
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+// UI elements
+const speedEl = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+const compressEl = document.getElementById('compress');
+const modeEl = document.getElementById('mode');
+const pauseBtn = document.getElementById('pause');
+const fsBtn = document.getElementById('fs');
+const resetBtn = document.getElementById('reset');
+const scaleLabel = document.getElementById('scaleAU');
+const modeNote = document.getElementById('modeNote');
+const followBadge = document.getElementById('followBadge');
+
+// State
+let W = 0, H = 0, CX = 0, CY = 0;
+let running = true;
+let timeDays = 0;                // simulation time in days
+let trails = [];                 // arrays of recent positions per planet
+let maxTrail = 140;              // trail length (frames)
+let followIndex = -1;            // -1 => follow Sun (centered); else planet index 0..7
+let viewOffset = {x:0,y:0};      // panning when following planets
+let baseScalePxPerAU = 1;        // updated each frame
+let tilt = 17 * DEG;             // gentle tilt for 3D vibe
+
+// Precompute mean motions and random mean anomalies to start
+PLANETS.forEach(p => {
+  p.n = 2 * Math.PI / p.P;     // rad/day
+  p.M0 = Math.random() * 2 * Math.PI;  // start at random phase for visual variety
+});
+
+// Simple starfield backdrop
+const stars = Array.from({length:350}, () => ({
+  x: Math.random(), y: Math.random(), s: Math.random()*1.2 + 0.3, a: Math.random()*0.5 + 0.2
+}));
+
+function resize() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(dpr, dpr);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  CX = W/2; CY = H/2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Kepler solver: solve M = E - e sin E for E (eccentric anomaly)
+function solveKepler(M, e) {
+  // normalize M to [-pi, pi]
+  M = (M + Math.PI) % (2*Math.PI) - Math.PI;
+  let E = e < 0.8 ? M : Math.PI; // initial guess
+  for (let i=0; i<10; i++) {
+    const f = E - e*Math.sin(E) - M;
+    const fp = 1 - e*Math.cos(E);
+    E = E - f/fp;
+  }
+  return E;
+}
+
+// Map physical radius (AU) to display radius (pixels) according to mode
+function radialMapAUtoPx(rAU, aMaxAU) {
+  const margin = 40;
+  const maxR = Math.min(W,H)/2 - margin;
+
+  if (modeEl.value === 'true') {
+    baseScalePxPerAU = maxR / aMaxAU;
+    return rAU * baseScalePxPerAU;
+  }
+
+  if (modeEl.value === 'auto') {
+    // Fit Neptune nicely but keep inner planets visible
+    baseScalePxPerAU = maxR / aMaxAU;
+    return rAU * baseScalePxPerAU * 1.1;
+  }
+
+  // Compressed (nonlinear): r_display = (r^alpha) * k
+  const alpha = parseFloat(compressEl.value); // 0.35..1
+  const rMaxDisp = maxR;
+  const rNorm = Math.pow(rAU / aMaxAU, alpha);
+  baseScalePxPerAU = rMaxDisp / Math.pow(aMaxAU, alpha); // implied for scale label
+  return rNorm * rMaxDisp;
+}
+
+// Draw faint full orbital path (ellipse) in current mode
+function drawOrbitPath(p, aMaxAU, centerX, centerY) {
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.rotate(0); // orientation kept simple
+  ctx.beginPath();
+  const steps = 360;
+  for (let i=0;i<=steps;i++) {
+    const theta = i/steps * 2*Math.PI;
+    // Parametric ellipse in orbital-plane coordinates:
+    // radius r = a*(1 - e^2) / (1 + e*cos(theta))
+    const r = p.a*(1 - p.e*p.e) / (1 + p.e*Math.cos(theta));
+    const R = radialMapAUtoPx(r, aMaxAU);
+    // depth tilt: squash y for subtle 3D
+    const x = R * Math.cos(theta);
+    const y = R * Math.sin(theta) * Math.cos(tilt);
+    if (i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = "rgba(180,200,255,0.15)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Draw planet + trail
+function drawPlanet(i, posPx, color, size, name) {
+  // Trail
+  const t = trails[i];
+  t.push(posPx);
+  if (t.length > maxTrail) t.shift();
+
+  ctx.lineWidth = 2;
+  for (let k=1; k<t.length; k++) {
+    const a = k / t.length; // fade older segments
+    ctx.strokeStyle = `rgba( ${hexR(color)}, ${hexG(color)}, ${hexB(color)}, ${0.15 + 0.55*a} )`;
+    ctx.beginPath();
+    ctx.moveTo(t[k-1].x, t[k-1].y);
+    ctx.lineTo(t[k].x, t[k].y);
+    ctx.stroke();
+  }
+
+  // Planet body
+  ctx.beginPath();
+  ctx.fillStyle = color;
+  ctx.arc(posPx.x, posPx.y, size, 0, 2*Math.PI);
+  ctx.fill();
+
+  // Simple glow
+  ctx.beginPath();
+  ctx.arc(posPx.x, posPx.y, size+8, 0, 2*Math.PI);
+  ctx.strokeStyle = hexWithAlpha(color, 0.25);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Rings for Saturn
+  if (PLANETS[i].rings) {
+    ctx.save();
+    ctx.translate(posPx.x, posPx.y);
+    ctx.scale(1, Math.cos(tilt));
+    ctx.beginPath();
+    ctx.ellipse(0,0, size*2.2, size*0.9, 0, 0, 2*Math.PI);
+    ctx.strokeStyle = "rgba(245,230,180,0.6)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Label
+  ctx.fillStyle = "#cfe2ff";
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto";
+  ctx.textAlign = "center";
+  ctx.fillText(name, posPx.x, posPx.y - (size + 10));
+}
+
+// Utility: color helpers
+function hexR(h){ return parseInt(h.slice(1,3),16); }
+function hexG(h){ return parseInt(h.slice(3,5),16); }
+function hexB(h){ return parseInt(h.slice(5,7),16); }
+function hexWithAlpha(h, a){
+  return `rgba(${hexR(h)},${hexG(h)},${hexB(h)},${a})`;
+}
+
+// Backdrop stars
+function drawStars() {
+  ctx.save();
+  for (const s of stars) {
+    const x = s.x * W, y = s.y * H;
+    ctx.globalAlpha = s.a;
+    ctx.fillStyle = "#9fb7ff";
+    ctx.fillRect(x, y, s.s, s.s);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Hit test for clicking planets
+function hitPlanet(mouseX, mouseY, pos, size) {
+  const dx = mouseX - pos.x, dy = mouseY - pos.y;
+  return (dx*dx + dy*dy) <= (size+10)*(size+10);
+}
+
+/* ========= Main Loop ========= */
+
+function resetScene() {
+  trails = PLANETS.map(()=>[]);
+  timeDays = 0;
+  followIndex = -1; // Sun
+  followBadge.textContent = `Following: Sun — tap a planet name to follow it`;
+}
+resetScene();
+
+pauseBtn.addEventListener('click', () => {
+  running = !running;
+  pauseBtn.textContent = running ? "⏸︎ Pause" : "▶︎ Play";
+});
+
+fsBtn.addEventListener('click', () => {
+  const elem = document.documentElement;
+  if (!document.fullscreenElement) {
+    elem.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+});
+
+resetBtn.addEventListener('click', () => resetScene());
+
+speedEl.addEventListener('input', () => { speedVal.textContent = `${speedEl.value}×`; });
+speedVal.textContent = `${speedEl.value}×`;
+
+modeEl.addEventListener('change', () => {
+  modeNote.textContent =
+    modeEl.value === 'true' ? "True scale: outer planets are very far away." :
+    modeEl.value === 'auto' ? "Auto-fit: scales to keep all orbits visible." :
+    "Distances compressed to fit screen.";
+});
+
+canvas.addEventListener('click', (ev) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (ev.clientX - rect.left);
+  const my = (ev.clientY - rect.top);
+
+  // Determine current positions again for hit test
+  const aMax = Math.max(...PLANETS.map(p=>p.a*(1+p.e)));
+  let center = {x:CX, y:CY};
+  if (followIndex >= 0) center = lastPlanetScreenPos[followIndex] ?? center;
+
+  for (let i=0; i<PLANETS.length; i++) {
+    const pos = lastPlanetScreenPos[i];
+    if (!pos) continue;
+    if (hitPlanet(mx, my, pos, PLANETS[i].size)) {
+      followIndex = i;
+      followBadge.textContent = `Following: ${PLANETS[i].name} — tap “Reset View” or the Sun label to stop`;
+      return;
+    }
+  }
+  // If click near Sun label, reset follow
+  const sunLabelBox = {x: CX-40, y: CY-40, w: 80, h: 20};
+  if (mx>sunLabelBox.x && mx<sunLabelBox.x+sunLabelBox.w && my>sunLabelBox.y && my<sunLabelBox.y+sunLabelBox.h) {
+    followIndex = -1;
+    followBadge.textContent = `Following: Sun — tap a planet name to follow it`;
+  }
+});
+
+let lastPlanetScreenPos = [];
+
+function loop() {
+  requestAnimationFrame(loop);
+
+  // Update time
+  if (running) {
+    const speed = parseFloat(speedEl.value);   // days per frame multiplier
+    timeDays += speed;
+  }
+
+  // Clear
+  ctx.clearRect(0,0,W,H);
+  drawStars();
+
+  // Compute max aphelion for scaling reference
+  const aMaxAU = Math.max(...PLANETS.map(p => p.a*(1+p.e)));
+
+  // Determine center (follow)
+  const center = {x:CX, y:CY};
+
+  // Draw Sun
+  ctx.beginPath();
+  ctx.arc(CX, CY, 10, 0, 2*Math.PI);
+  ctx.fillStyle = "#ffd76b";
+  ctx.shadowColor = "#ffd76b"; ctx.shadowBlur = 18;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Sun label (clickable area for reset)
+  ctx.fillStyle = "#ffe7a8";
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto";
+  ctx.textAlign = "center";
+  ctx.fillText("Sun", CX, CY - 16);
+
+  // Draw orbits first (so trails/planets render over them)
+  for (let i=0; i<PLANETS.length; i++) {
+    drawOrbitPath(PLANETS[i], aMaxAU, CX, CY);
+  }
+
+  // Compute and draw each planet
+  lastPlanetScreenPos = [];
+  for (let i=0; i<PLANETS.length; i++) {
+    const p = PLANETS[i];
+
+    // Mean anomaly at current time
+    const M = p.M0 + p.n * timeDays;
+    const E = solveKepler(M, p.e);
+    const cosE = Math.cos(E), sinE = Math.sin(E);
+
+    // Distance and true anomaly
+    const r = p.a * (1 - p.e * cosE); // AU
+    const cosNu = (cosE - p.e) / (1 - p.e * cosE);
+    const sinNu = (Math.sqrt(1 - p.e*p.e) * sinE) / (1 - p.e * cosE);
+    const nu = Math.atan2(sinNu, cosNu);
+
+    // Map to pixels with distance mode and add subtle tilt for depth
+    const Rpx = radialMapAUtoPx(r, aMaxAU);
+    const x = CX + Rpx * Math.cos(nu);
+    const y = CY + (Rpx * Math.sin(nu) * Math.cos(tilt));
+
+    lastPlanetScreenPos[i] = {x,y};
+
+    // If following a planet, shift everything so that planet stays near center
+    // (We implement by drawing planet relative to center, but since we already drew orbits relative to Sun,
+    // we emulate follow by drawing trails/planets in absolute screen coords and letting user visually follow;
+    // for a stronger “follow” effect we could translate canvas, but this keeps UI crisp.)
+  }
+
+  // Draw trails & planets (second pass so we use consistent positions)
+  for (let i=0; i<PLANETS.length; i++) {
+    drawPlanet(i, lastPlanetScreenPos[i], PLANETS[i].color, PLANETS[i].size, PLANETS[i].name);
+  }
+
+  // Compression Note / Scale
+  let scaleText = "";
+  if (modeEl.value === 'true') {
+    scaleText = `Scale ≈ ${baseScalePxPerAU.toFixed(1)} px per AU`;
+  } else if (modeEl.value === 'auto') {
+    scaleText = `Auto-fit (≈ ${baseScalePxPerAU.toFixed(1)} px/AU)`;
+  } else {
+    const alpha = parseFloat(compressEl.value);
+    scaleText = `Compressed: r_display ∝ r^${alpha.toFixed(2)}  (implied ~${baseScalePxPerAU.toFixed(1)} px/AU)`;
+  }
+  scaleLabel.textContent = scaleText;
+}
+loop();
+
+/* ========= That little extra wow =========
+   - Trails glow and fade
+   - Starfield backdrop
+   - Saturn rings & subtle orbital tilt
+   - Click planet to follow (label shows who)
+   ====================================== */
+</script>
+</body>
+</html>
