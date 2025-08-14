@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Solar System Simulation v8.0</title>
+<title>Solar System Simulation v8.1</title>
 <style>
 html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
-#ui { position:absolute; top:10px; left:10px; z-index:10; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff;}
+#ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:200px;}
 label{display:block; margin:5px 0;}
+button{display:block; margin-top:5px; width:100%;}
 .info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:220px;}
-#toggleTilt, #resetView { margin-top:5px; display:block; }
-#versionLabel { position:absolute; bottom:5px; right:10px; color:rgba(255,255,255,0.5); font-size:14px; z-index:10;}
+#versionLabel { position:absolute; bottom:5px; right:10px; color:rgba(255,255,255,0.5); font-size:14px; z-index:100;}
 </style>
 </head>
 <body>
@@ -21,21 +21,21 @@ label{display:block; margin:5px 0;}
   <button id="toggleTilt">Toggle Tilt Control</button>
   <button id="resetView">Reset View</button>
 </div>
-<div id="versionLabel">v8.0</div>
+<div id="versionLabel">v8.1</div>
 <div id="infoBox" class="info-box" style="display:none;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
 <script>
 let planets=[
-  {name:"Mercury", color:"#a9a9a9", a:57.9, e:0.205, radius:4, period:88, facts:"Mercury is the smallest planet and closest to the Sun."},
-  {name:"Venus", color:"#f5deb3", a:108.2, e:0.007, radius:7, period:224.7, facts:"Venus spins backward, so the Sun rises in the west."},
-  {name:"Earth", color:"#1e90ff", a:149.6, e:0.017, radius:8, period:365.2, facts:"Earth is the only planet known to support life."},
-  {name:"Mars", color:"#ff4500", a:227.9, e:0.094, radius:6, period:687, facts:"Mars has the tallest volcano in the solar system, Olympus Mons."},
-  {name:"Jupiter", color:"#ffa500", a:778.6, e:0.049, radius:14, period:4331, facts:"Jupiter is the largest planet and has a giant storm called the Great Red Spot."},
-  {name:"Saturn", color:"#f0e68c", a:1433.5, e:0.056, radius:12, period:10747, facts:"Saturn's rings are made mostly of ice particles."},
-  {name:"Uranus", color:"#7fffd4", a:2872.5, e:0.046, radius:10, period:30589, facts:"Uranus rotates on its side, making extreme seasons."},
-  {name:"Neptune", color:"#4169e1", a:4495.1, e:0.010, radius:10, period:59800, facts:"Neptune has the strongest winds in the solar system."},
-  {name:"Pluto", color:"#d3d3d3", a:5906.4, e:0.2488, radius:3, period:90560, facts:"Pluto is a dwarf planet in the Kuiper belt."}
+  {name:"Mercury", color:"#a9a9a9", a:57.9, radius:4, period:88, facts:"Mercury is the smallest planet and closest to the Sun."},
+  {name:"Venus", color:"#f5deb3", a:108.2, radius:7, period:224.7, facts:"Venus spins backward, so the Sun rises in the west."},
+  {name:"Earth", color:"#1e90ff", a:149.6, radius:8, period:365.2, facts:"Earth is the only planet known to support life."},
+  {name:"Mars", color:"#ff4500", a:227.9, radius:6, period:687, facts:"Mars has the tallest volcano in the solar system, Olympus Mons."},
+  {name:"Jupiter", color:"#ffa500", a:778.6, radius:14, period:4331, facts:"Jupiter is the largest planet and has a giant storm called the Great Red Spot."},
+  {name:"Saturn", color:"#f0e68c", a:1433.5, radius:12, period:10747, facts:"Saturn's rings are made mostly of ice particles."},
+  {name:"Uranus", color:"#7fffd4", a:2872.5, radius:10, period:30589, facts:"Uranus rotates on its side, making extreme seasons."},
+  {name:"Neptune", color:"#4169e1", a:4495.1, radius:10, period:59800, facts:"Neptune has the strongest winds in the solar system."},
+  {name:"Pluto", color:"#d3d3d3", a:5906.4, radius:3, period:90560, facts:"Pluto is a dwarf planet in the Kuiper belt."}
 ];
 
 let trails={}, speedSlider, distSlider, trailSlider;
@@ -52,6 +52,7 @@ function setup(){
   distSlider=select('#distSlider');
   trailSlider=select('#trailSlider');
   infoBox=select('#infoBox');
+
   select('#toggleTilt').mousePressed(()=> tiltControl=!tiltControl);
   select('#resetView').mousePressed(resetView);
 
@@ -89,9 +90,7 @@ function draw(){
     let t=frameCount*speedMult*(365/p.period)*0.05;
     p.angle=t;
 
-    // Distance compression with offset for outer planets
     let r=p.a<5000 ? p.a*scaleFactor : scaleFactor*0.8*p.a/5000 + width*0.1;
-
     let x=r*cos(p.angle);
     let y=r*sin(p.angle)*tiltFactor;
 
@@ -148,7 +147,7 @@ function touchMoved(event){
     let midY=(touches[0].y+touches[1].y)/2;
 
     if(lastDist>0){
-      let factor = 1 + (d - lastDist)*0.002; // Correct zoom
+      let factor = 1 + (d - lastDist)*0.002;
       let worldX=(midX-width/2)/zoomLevel+camX;
       let worldY=(midY-height/2*0.9)/zoomLevel+camY;
       targetZoom*=factor;
@@ -156,7 +155,6 @@ function touchMoved(event){
       targetX=worldX-(midX-width/2)/targetZoom;
       targetY=worldY-(midY-height/2*0.9)/targetZoom;
 
-      // Two-finger pan
       let dx=(midX-lastMidX)/zoomLevel;
       let dy=(midY-lastMidY)/zoomLevel;
       targetX-=dx; targetY-=dy;
