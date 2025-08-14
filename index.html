@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Solar System Simulation - Cinematic Rotation</title>
+<title>Solar System Simulation - Pinch Zoom & Pan</title>
 <style>
   html, body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif;}
   #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;}
@@ -55,7 +55,8 @@ let defaultTilt = 0.5;
 let tiltFactor = defaultTilt;
 let tiltControl = false;
 let lastDist = 0;
-let camAngle = 0; // for auto rotation
+let lastMidX = 0, lastMidY = 0;
+let camAngle = 0;
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
@@ -94,12 +95,11 @@ function draw(){
   camY += (targetY - camY) * 0.05;
   zoomLevel += (targetZoom - zoomLevel) * 0.05;
 
-  // Automatic camera rotation when at default zoom and not centering planet
-  if(abs(targetZoom - 1) < 0.01 && !mouseIsPressed){
+  // Automatic camera rotation when at default zoom
+  if(abs(targetZoom - 1) < 0.01 && !mouseIsPressed && touches.length == 0){
     camAngle += 0.001;
-    let radius = 0;
-    camX = radius * cos(camAngle);
-    camY = radius * sin(camAngle);
+    camX = cos(camAngle) * 0;
+    camY = sin(camAngle) * 0;
   }
 
   translate(width/2, height/2*0.9);
@@ -168,31 +168,59 @@ function draw(){
   }
 }
 
-// Mouse wheel for zoom
+// Desktop zoom
 function mouseWheel(event){
-  targetZoom *= event.delta > 0 ? 0.95 : 1.05;
-  targetZoom = constrain(targetZoom, 0.1, 5);
+  const zoomChange = event.delta > 0 ? 0.95 : 1.05;
+  let mouseXWorld = (mouseX - width/2)/zoomLevel + camX;
+  let mouseYWorld = (mouseY - height/2*0.9)/zoomLevel + camY;
+  targetZoom *= zoomChange;
+  targetZoom = constrain(targetZoom, 0.2, 5);
+  targetX = mouseXWorld - (mouseX - width/2)/targetZoom;
+  targetY = mouseYWorld - (mouseY - height/2*0.9)/targetZoom;
 }
 
-// Two-finger pinch zoom / tilt for mobile
+// Pinch zoom + two-finger pan for mobile
 function touchMoved(){
   if(touches.length == 2){
     let d = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+    let midX = (touches[0].x + touches[1].x)/2;
+    let midY = (touches[0].y + touches[1].y)/2;
+
     if(lastDist > 0){
-      let factor = d/lastDist;
+      // Pinch zoom
+      let factor = 1 + (d - lastDist)*0.002;
+      let worldX = (midX - width/2)/zoomLevel + camX;
+      let worldY = (midY - height/2*0.9)/zoomLevel + camY;
       targetZoom *= factor;
-      targetZoom = constrain(targetZoom, 0.1, 5);
+      targetZoom = constrain(targetZoom, 0.2, 5);
+      targetX = worldX - (midX - width/2)/targetZoom;
+      targetY = worldY - (midY - height/2*0.9)/targetZoom;
+
+      // Two-finger pan
+      let dx = (midX - lastMidX)/zoomLevel;
+      let dy = (midY - lastMidY)/zoomLevel;
+      targetX -= dx;
+      targetY -= dy;
+
+      // Tilt control
       if(tiltControl){
-        let dy = (touches[0].y + touches[1].y)/2 - (pmouseY + pmouseY)/2;
-        tiltFactor += dy*0.005;
+        let dyTilt = (midY - lastMidY);
+        tiltFactor += dyTilt*0.005;
         tiltFactor = constrain(tiltFactor, 0.1, 1);
       }
     }
     lastDist = d;
+    lastMidX = midX;
+    lastMidY = midY;
     return false;
   }
 }
-function touchEnded(){ lastDist = 0; }
+
+function touchEnded(){ 
+  lastDist = 0; 
+  lastMidX = 0;
+  lastMidY = 0;
+}
 </script>
 </body>
 </html>
