@@ -7,7 +7,7 @@
   html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
   #ui { position:absolute; top:10px; left:10px; z-index:10; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff;}
   label{display:block; margin:5px 0;}
-  .info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:200px;}
+  .info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:220px;}
   #toggleTilt { margin-top:5px; }
 </style>
 </head>
@@ -39,7 +39,7 @@ let scaleFactor, maxOrbit, infoBox;
 let stars=[];
 let camX=0, camY=0, targetX=0, targetY=0, zoomLevel=1, targetZoom=1;
 let tiltFactor=0.5, tiltControl=false;
-let lastDist=0, lastMidX=0, lastMidY=0, camAngle=0;
+let lastDist=0, lastMidX=0, lastMidY=0;
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
@@ -61,14 +61,9 @@ function draw(){
   noStroke(); fill(255);
   for(let s of stars) ellipse(s.x,s.y,s.r);
 
-  camX+=(targetX-camX)*0.05;
-  camY+=(targetY-camY)*0.05;
-  zoomLevel+=(targetZoom-zoomLevel)*0.05;
-
-  if(abs(targetZoom-1)<0.01 && touches.length==0){
-    camAngle+=0.001;
-    camX=0; camY=0;
-  }
+  camX += (targetX - camX)*0.05;
+  camY += (targetY - camY)*0.05;
+  zoomLevel += (targetZoom - zoomLevel)*0.05;
 
   translate(width/2, height/2*0.9);
   scale(zoomLevel);
@@ -81,14 +76,16 @@ function draw(){
     let t=frameCount*speedMult*(365/p.period)*0.05;
     p.angle=t;
 
-    let r = (p.a==planets[planets.length-1].a)? scaleFactor*0.8*p.a/1000 : p.a*scaleFactor; // compress Pluto
+    // Adjust distance: compress outer planets, but keep visible
+    let r = p.a <= 5000 ? p.a*scaleFactor : scaleFactor*0.8*p.a/5000;
     let x=r*cos(p.angle);
     let y=r*sin(p.angle)*tiltFactor;
 
     trails[p.name].push([x,y]);
     if(trails[p.name].length>trailSlider.value()) trails[p.name].shift();
 
-    noFill(); stroke(255,30); ellipse(0,0,r*2,r*2*tiltFactor);
+    noFill(); stroke(255,30);
+    ellipse(0,0,r*2,r*2*tiltFactor);
 
     beginShape();
     for(let i=0;i<trails[p.name].length;i++){
@@ -115,9 +112,10 @@ function draw(){
     }
   }
 
-  if(!mouseIsPressed){infoBox.style('display','none'); if(targetZoom>1.01 && touches.length==0){targetX=0; targetY=0; targetZoom=1;}}
+  if(!mouseIsPressed){ infoBox.style('display','none'); if(targetZoom>1.01 && touches.length==0){targetX=0; targetY=0; targetZoom=1;}}
 }
 
+// Mouse wheel zoom
 function mouseWheel(event){
   let zoomChange=(event.delta>0)?0.95:1.05;
   let mouseXWorld=(mouseX-width/2)/zoomLevel+camX;
@@ -128,29 +126,36 @@ function mouseWheel(event){
   targetY=mouseYWorld-(mouseY-height/2*0.9)/targetZoom;
 }
 
+// Touch controls
 function touchMoved(event){
   event.preventDefault();
   if(touches.length==2){
     let d=dist(touches[0].x,touches[0].y,touches[1].x,touches[1].y);
     let midX=(touches[0].x+touches[1].x)/2;
     let midY=(touches[0].y+touches[1].y)/2;
+
     if(lastDist>0){
-      let factor=1+(d-lastDist)*0.002;
+      // Correct pinch zoom: increase distance -> zoom in
+      let factor = 1 + (d - lastDist)*0.002;
       let worldX=(midX-width/2)/zoomLevel+camX;
       let worldY=(midY-height/2*0.9)/zoomLevel+camY;
       targetZoom*=factor;
       targetZoom=constrain(targetZoom,0.2,5);
       targetX=worldX-(midX-width/2)/targetZoom;
       targetY=worldY-(midY-height/2*0.9)/targetZoom;
+
+      // Two-finger pan
       let dx=(midX-lastMidX)/zoomLevel;
       let dy=(midY-lastMidY)/zoomLevel;
       targetX-=dx; targetY-=dy;
+
       if(tiltControl){ tiltFactor+=dy*0.005; tiltFactor=constrain(tiltFactor,0.1,1);}
     }
     lastDist=d; lastMidX=midX; lastMidY=midY;
   }
 }
-function touchEnded(){lastDist=0; lastMidX=0; lastMidY=0;}
+
+function touchEnded(){ lastDist=0; lastMidX=0; lastMidY=0;}
 </script>
 </body>
 </html>
