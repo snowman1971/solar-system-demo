@@ -2,28 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Solar System Simulation - Planet-Focused Zoom</title>
+<title>Solar System Simulation</title>
 <style>
-  html, body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
-  #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;}
-  label { display:block; margin: 5px 0; color: #fff;}
-  .info-box {
-    position: absolute;
-    background: rgba(0,0,0,0.8);
-    color: #fff;
-    padding: 6px 10px;
-    border-radius: 6px;
-    pointer-events: none;
-    font-size: 12px;
-    max-width: 200px;
-  }
-  #toggleTilt { margin-top: 5px; }
+  html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
+  #ui { position:absolute; top:10px; left:10px; z-index:10; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff;}
+  label{display:block; margin:5px 0;}
+  .info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:200px;}
+  #toggleTilt { margin-top:5px; }
 </style>
 </head>
 <body>
 <div id="ui">
   <label>Speed: <input type="range" id="speedSlider" min="0" max="10" value="5" step="0.1"></label>
-  <label>Distance Compression / Zoom: <input type="range" id="distSlider" min="0.05" max="5" value="0.5" step="0.01"></label>
+  <label>Distance Compression / Zoom: <input type="range" id="distSlider" min="0.05" max="2" value="0.5" step="0.01"></label>
   <label>Trail Length: <input type="range" id="trailSlider" min="10" max="200" value="50" step="1"></label>
   <button id="toggleTilt">Toggle Tilt Control</button>
 </div>
@@ -31,7 +22,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
 <script>
-let planets = [
+let planets=[
   {name:"Mercury", color:"#a9a9a9", a:57.9, e:0.205, radius:4, period:88, facts:"Mercury is the smallest planet and closest to the Sun."},
   {name:"Venus", color:"#f5deb3", a:108.2, e:0.007, radius:7, period:224.7, facts:"Venus spins backward, so the Sun rises in the west."},
   {name:"Earth", color:"#1e90ff", a:149.6, e:0.017, radius:8, period:365.2, facts:"Earth is the only planet known to support life."},
@@ -43,144 +34,123 @@ let planets = [
   {name:"Pluto", color:"#d3d3d3", a:5906.4, e:0.2488, radius:3, period:90560, facts:"Pluto is a dwarf planet in the Kuiper belt."}
 ];
 
-let trails = {};
-let speedSlider, distSlider, trailSlider;
-let scaleFactor, maxOrbit;
-let infoBox;
-let stars = [];
-let camX = 0, camY = 0;
-let targetX = 0, targetY = 0;
-let zoomLevel = 1, targetZoom = 1;
-let defaultTilt = 0.5;
-let tiltFactor = defaultTilt;
-let tiltControl = false;
-let lastDist = 0;
-let lastMidX = 0, lastMidY = 0;
-let camAngle = 0;
+let trails={}, speedSlider, distSlider, trailSlider;
+let scaleFactor, maxOrbit, infoBox;
+let stars=[];
+let camX=0, camY=0, targetX=0, targetY=0, zoomLevel=1, targetZoom=1;
+let tiltFactor=0.5, tiltControl=false;
+let lastDist=0, lastMidX=0, lastMidY=0, camAngle=0;
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
-  speedSlider = select('#speedSlider');
-  distSlider = select('#distSlider');
-  trailSlider = select('#trailSlider');
-  infoBox = select('#infoBox');
-  select('#toggleTilt').mousePressed(()=> tiltControl = !tiltControl);
-
-  maxOrbit = Math.max(...planets.map(p=>p.a));
-  scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value();
-  for(let p of planets){ trails[p.name] = [];}
-
-  // Stars covering entire canvas
-  for(let i=0;i<1500;i++){
-    stars.push({x:random(-width, width), y:random(-height, height), r:random(1,2)});
-  }
+  speedSlider=select('#speedSlider');
+  distSlider=select('#distSlider');
+  trailSlider=select('#trailSlider');
+  infoBox=select('#infoBox');
+  select('#toggleTilt').mousePressed(()=> tiltControl=!tiltControl);
+  maxOrbit=planets[planets.length-1].a;
+  scaleFactor=min(width,height)/2 / maxOrbit * distSlider.value();
+  for(let p of planets) trails[p.name]=[];
+  for(let i=0;i<1500;i++) stars.push({x:random(-width,width),y:random(-height,height),r:random(1,2)});
 }
 
-function windowResized(){ 
-  resizeCanvas(windowWidth, windowHeight); 
-}
+function windowResized(){resizeCanvas(windowWidth,windowHeight);}
 
 function draw(){
-  background(0); 
+  background(0);
+  noStroke(); fill(255);
+  for(let s of stars) ellipse(s.x,s.y,s.r);
 
-  // Draw stars
-  noStroke();
-  fill(255);
-  for(let s of stars){
-    ellipse(s.x, s.y, s.r);
-  }
+  camX+=(targetX-camX)*0.05;
+  camY+=(targetY-camY)*0.05;
+  zoomLevel+=(targetZoom-zoomLevel)*0.05;
 
-  camX += (targetX - camX) * 0.05;
-  camY += (targetY - camY) * 0.05;
-  zoomLevel += (targetZoom - zoomLevel) * 0.05;
-
-  if(abs(targetZoom - 1) < 0.01 && touches.length==0){
-    camAngle += 0.001;
-    camX = cos(camAngle)*0;
-    camY = sin(camAngle)*0;
+  if(abs(targetZoom-1)<0.01 && touches.length==0){
+    camAngle+=0.001;
+    camX=0; camY=0;
   }
 
   translate(width/2, height/2*0.9);
   scale(zoomLevel);
   translate(-camX, -camY);
 
-  let speedMult = speedSlider.value()/5;
-  scaleFactor = min(width, height)/2 / maxOrbit * distSlider.value();
+  let speedMult=speedSlider.value()/5;
+  scaleFactor=min(width,height)/2 / maxOrbit * distSlider.value();
 
   for(let p of planets){
-    let t = frameCount * speedMult * (365/p.period) * 0.05;
-    p.angle = t;
+    let t=frameCount*speedMult*(365/p.period)*0.05;
+    p.angle=t;
 
-    // Apply logarithmic scaling for outer planets
-    let distScale = (p.a > 1000) ? log(p.a)/log(maxOrbit)*maxOrbit : p.a;
-    let r = distScale*(1-p.e*p.e)/(1+p.e*cos(p.angle));
-
-    let x = r*cos(p.angle)*scaleFactor;
-    let y = r*sin(p.angle)*scaleFactor*tiltFactor;
+    let r = (p.a==planets[planets.length-1].a)? scaleFactor*0.8*p.a/1000 : p.a*scaleFactor; // compress Pluto
+    let x=r*cos(p.angle);
+    let y=r*sin(p.angle)*tiltFactor;
 
     trails[p.name].push([x,y]);
     if(trails[p.name].length>trailSlider.value()) trails[p.name].shift();
 
-    noFill();
-    stroke(255,30);
-    ellipse(0,0,r*2*scaleFactor, r*2*scaleFactor*tiltFactor);
+    noFill(); stroke(255,30); ellipse(0,0,r*2,r*2*tiltFactor);
 
     beginShape();
     for(let i=0;i<trails[p.name].length;i++){
-      let alpha = map(i,0,trails[p.name].length,0,255);
-      stroke(p.color + hex(int(alpha),2));
-      vertex(trails[p.name][i][0], trails[p.name][i][1]);
+      let alpha=map(i,0,trails[p.name].length,0,255);
+      stroke(p.color+hex(int(alpha),2));
+      vertex(trails[p.name][i][0],trails[p.name][i][1]);
     }
     endShape();
 
-    noStroke();
-    fill(p.color);
+    noStroke(); fill(p.color);
     ellipse(x,y,p.radius*2,p.radius*2);
 
-    fill(255);
-    textSize(12/zoomLevel);
-    textAlign(CENTER);
-    text(p.name, x, y - p.radius*2);
+    fill(255); textSize(12/zoomLevel); textAlign(CENTER);
+    text(p.name,x,y-p.radius*2);
 
-    // Info pop-ups
-    let mx = (mouseX - width/2)/zoomLevel + camX;
-    let my = (mouseY - height/2*0.9)/zoomLevel + camY;
-    let d = dist(mx,my,x,y);
-    if((mouseIsPressed || touches.length==0) && d<p.radius*4){ // larger radius for touch
+    let mx=(mouseX-width/2)/zoomLevel+camX;
+    let my=(mouseY-height/2*0.9)/zoomLevel+camY;
+    let d=dist(mx,my,x,y);
+    if((mouseIsPressed || touches.length>0) && d<p.radius*4){
       infoBox.html(`<strong>${p.name}</strong><br>Radius: ${p.radius*1000} km approx<br>Distance: ${p.a} million km<br>Orbital period: ${p.period} days<br>${p.facts}`);
-      infoBox.position(mouseX + 10, mouseY + 10);
+      infoBox.position(mouseX+10, mouseY+10);
       infoBox.style('display','block');
-      targetX = x; targetY = y; targetZoom = 2;
+      targetX=x; targetY=y; targetZoom=2;
     }
   }
 
-  if(!mouseIsPressed){
-    infoBox.style('display','none');
-    if(targetZoom > 1.01 && touches.length==0){
-      targetX = 0; targetY = 0; targetZoom = 1;
-    }
-  }
+  if(!mouseIsPressed){infoBox.style('display','none'); if(targetZoom>1.01 && touches.length==0){targetX=0; targetY=0; targetZoom=1;}}
 }
 
-// Desktop zoom
 function mouseWheel(event){
-  const zoomChange = event.delta > 0 ? 0.95 : 1.05;
-  let mouseXWorld = (mouseX - width/2)/zoomLevel + camX;
-  let mouseYWorld = (mouseY - height/2*0.9)/zoomLevel + camY;
-  targetZoom *= zoomChange;
-  targetZoom = constrain(targetZoom, 0.2, 5);
-  targetX = mouseXWorld - (mouseX - width/2)/targetZoom;
-  targetY = mouseYWorld - (mouseY - height/2*0.9)/targetZoom;
+  let zoomChange=(event.delta>0)?0.95:1.05;
+  let mouseXWorld=(mouseX-width/2)/zoomLevel+camX;
+  let mouseYWorld=(mouseY-height/2*0.9)/zoomLevel+camY;
+  targetZoom*=zoomChange;
+  targetZoom=constrain(targetZoom,0.2,5);
+  targetX=mouseXWorld-(mouseX-width/2)/targetZoom;
+  targetY=mouseYWorld-(mouseY-height/2*0.9)/targetZoom;
 }
 
-// Mobile touch controls
 function touchMoved(event){
   event.preventDefault();
-  if(touches.length == 2){
-    let d = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
-    let midX = (touches[0].x + touches[1].x)/2;
-    let midY = (touches[0].y + touches[1].y)/2;
-
-    if(lastDist > 0){
-      let factor = 1 + (d - lastDist)*0.002;
-      let worldX = (mid
+  if(touches.length==2){
+    let d=dist(touches[0].x,touches[0].y,touches[1].x,touches[1].y);
+    let midX=(touches[0].x+touches[1].x)/2;
+    let midY=(touches[0].y+touches[1].y)/2;
+    if(lastDist>0){
+      let factor=1+(d-lastDist)*0.002;
+      let worldX=(midX-width/2)/zoomLevel+camX;
+      let worldY=(midY-height/2*0.9)/zoomLevel+camY;
+      targetZoom*=factor;
+      targetZoom=constrain(targetZoom,0.2,5);
+      targetX=worldX-(midX-width/2)/targetZoom;
+      targetY=worldY-(midY-height/2*0.9)/targetZoom;
+      let dx=(midX-lastMidX)/zoomLevel;
+      let dy=(midY-lastMidY)/zoomLevel;
+      targetX-=dx; targetY-=dy;
+      if(tiltControl){ tiltFactor+=dy*0.005; tiltFactor=constrain(tiltFactor,0.1,1);}
+    }
+    lastDist=d; lastMidX=midX; lastMidY=midY;
+  }
+}
+function touchEnded(){lastDist=0; lastMidX=0; lastMidY=0;}
+</script>
+</body>
+</html>
