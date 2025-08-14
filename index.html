@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Solar System Simulation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Solar System Simulation v8.0</title>
 <style>
-  html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
-  #ui { position:absolute; top:10px; left:10px; z-index:10; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff;}
-  label{display:block; margin:5px 0;}
-  .info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:220px;}
-  #toggleTilt { margin-top:5px; }
+html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
+#ui { position:absolute; top:10px; left:10px; z-index:10; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff;}
+label{display:block; margin:5px 0;}
+.info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:220px;}
+#toggleTilt, #resetView { margin-top:5px; display:block; }
+#versionLabel { position:absolute; bottom:5px; right:10px; color:rgba(255,255,255,0.5); font-size:14px; z-index:10;}
 </style>
 </head>
 <body>
@@ -17,7 +19,9 @@
   <label>Distance Compression / Zoom: <input type="range" id="distSlider" min="0.05" max="2" value="0.5" step="0.01"></label>
   <label>Trail Length: <input type="range" id="trailSlider" min="10" max="200" value="50" step="1"></label>
   <button id="toggleTilt">Toggle Tilt Control</button>
+  <button id="resetView">Reset View</button>
 </div>
+<div id="versionLabel">v8.0</div>
 <div id="infoBox" class="info-box" style="display:none;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
@@ -35,11 +39,12 @@ let planets=[
 ];
 
 let trails={}, speedSlider, distSlider, trailSlider;
-let scaleFactor, maxOrbit, infoBox;
 let stars=[];
 let camX=0, camY=0, targetX=0, targetY=0, zoomLevel=1, targetZoom=1;
 let tiltFactor=0.5, tiltControl=false;
 let lastDist=0, lastMidX=0, lastMidY=0;
+let infoBox;
+let maxOrbit;
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
@@ -48,13 +53,18 @@ function setup(){
   trailSlider=select('#trailSlider');
   infoBox=select('#infoBox');
   select('#toggleTilt').mousePressed(()=> tiltControl=!tiltControl);
+  select('#resetView').mousePressed(resetView);
+
   maxOrbit=planets[planets.length-1].a;
-  scaleFactor=min(width,height)/2 / maxOrbit * distSlider.value();
   for(let p of planets) trails[p.name]=[];
   for(let i=0;i<1500;i++) stars.push({x:random(-width,width),y:random(-height,height),r:random(1,2)});
 }
 
 function windowResized(){resizeCanvas(windowWidth,windowHeight);}
+
+function resetView(){
+  targetX=0; targetY=0; targetZoom=1; tiltFactor=0.5;
+}
 
 function draw(){
   background(0);
@@ -70,22 +80,25 @@ function draw(){
   translate(-camX, -camY);
 
   let speedMult=speedSlider.value()/5;
-  scaleFactor=min(width,height)/2 / maxOrbit * distSlider.value();
+  let compression=distSlider.value();
+  let trailLength=trailSlider.value();
+
+  let scaleFactor=min(width,height)/2 / maxOrbit * compression;
 
   for(let p of planets){
     let t=frameCount*speedMult*(365/p.period)*0.05;
     p.angle=t;
 
-    // Adjust distance: compress outer planets, but keep visible
-    let r = p.a <= 5000 ? p.a*scaleFactor : scaleFactor*0.8*p.a/5000;
+    // Distance compression with offset for outer planets
+    let r=p.a<5000 ? p.a*scaleFactor : scaleFactor*0.8*p.a/5000 + width*0.1;
+
     let x=r*cos(p.angle);
     let y=r*sin(p.angle)*tiltFactor;
 
     trails[p.name].push([x,y]);
-    if(trails[p.name].length>trailSlider.value()) trails[p.name].shift();
+    if(trails[p.name].length>trailLength) trails[p.name].shift();
 
-    noFill(); stroke(255,30);
-    ellipse(0,0,r*2,r*2*tiltFactor);
+    noFill(); stroke(255,30); ellipse(0,0,r*2,r*2*tiltFactor);
 
     beginShape();
     for(let i=0;i<trails[p.name].length;i++){
@@ -135,8 +148,7 @@ function touchMoved(event){
     let midY=(touches[0].y+touches[1].y)/2;
 
     if(lastDist>0){
-      // Correct pinch zoom: increase distance -> zoom in
-      let factor = 1 + (d - lastDist)*0.002;
+      let factor = 1 + (d - lastDist)*0.002; // Correct zoom
       let worldX=(midX-width/2)/zoomLevel+camX;
       let worldY=(midY-height/2*0.9)/zoomLevel+camY;
       targetZoom*=factor;
