@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Solar System Simulation v8.2</title>
+<title>Solar System Simulation v8.3</title>
 <style>
 html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
-#ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:200px;}
+#ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:220px;}
 label{display:block; margin:5px 0;}
 button{display:block; margin-top:5px; width:100%;}
-.info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:220px;}
+.info-box {position:absolute; background:rgba(0,0,0,0.8); color:#fff; padding:6px 10px; border-radius:6px; pointer-events:none; font-size:12px; max-width:220px; display:none;}
 #versionLabel { position:absolute; bottom:5px; right:10px; color:rgba(255,255,255,0.5); font-size:14px; z-index:100;}
 #compressionLabel { position:absolute; bottom:30px; right:10px; color:rgba(255,255,255,0.6); font-size:12px; z-index:100;}
 </style>
@@ -22,9 +22,9 @@ button{display:block; margin-top:5px; width:100%;}
   <button id="toggleTilt">Toggle Tilt Control</button>
   <button id="resetView">Reset View</button>
 </div>
-<div id="versionLabel">v8.2</div>
+<div id="versionLabel">v8.3</div>
 <div id="compressionLabel"></div>
-<div id="infoBox" class="info-box" style="display:none;"></div>
+<div id="infoBox" class="info-box"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
 <script>
@@ -118,26 +118,28 @@ function draw(){
     let mx=(mouseX-width/2)/zoomLevel+camX;
     let my=(mouseY-height/2*0.9)/zoomLevel+camY;
     let d=dist(mx,my,x,y);
-    if((mouseIsPressed || touches.length>0) && d<p.radius*4){
+    if(d<p.radius*4){ // Hover detection
       infoBox.html(`<strong>${p.name}</strong><br>Radius: ${p.radius*1000} km approx<br>Distance: ${p.a} million km<br>Orbital period: ${p.period} days<br>${p.facts}`);
       infoBox.position(mouseX+10, mouseY+10);
       infoBox.style('display','block');
-      targetX=x; targetY=y; targetZoom=2;
     }
   }
-
-  if(!mouseIsPressed){ infoBox.style('display','none'); if(targetZoom>1.01 && touches.length==0){targetX=0; targetY=0; targetZoom=1;}}
+  if(planets.every(p=>dist((mouseX-width/2)/zoomLevel+camX,(mouseY-height/2*0.9)/zoomLevel+camY,p.a*cos(p.angle),p.a*sin(p.angle)*tiltFactor)>p.radius*4)){
+    infoBox.style('display','none');
+  }
 }
 
 // Mouse wheel zoom
 function mouseWheel(event){
-  let zoomChange=(event.delta>0)?0.95:1.05;
-  let mouseXWorld=(mouseX-width/2)/zoomLevel+camX;
-  let mouseYWorld=(mouseY-height/2*0.9)/zoomLevel+camY;
-  targetZoom*=zoomChange;
-  targetZoom=constrain(targetZoom,0.2,5);
-  targetX=mouseXWorld-(mouseX-width/2)/targetZoom;
-  targetY=mouseYWorld-(mouseY-height/2*0.9)/targetZoom;
+  if(mouseX>220) { // ignore UI
+    let zoomChange=(event.delta>0)?0.95:1.05;
+    let mouseXWorld=(mouseX-width/2)/zoomLevel+camX;
+    let mouseYWorld=(mouseY-height/2*0.9)/zoomLevel+camY;
+    targetZoom*=zoomChange;
+    targetZoom=constrain(targetZoom,0.2,5);
+    targetX=mouseXWorld-(mouseX-width/2)/targetZoom;
+    targetY=mouseYWorld-(mouseY-height/2*0.9)/targetZoom;
+  }
 }
 
 // Touch controls
@@ -172,7 +174,11 @@ function touchMoved(event){
 }
 function touchEnded(){ lastDist=0; lastMidX=0; lastMidY=0; lastMouseY=0; }
 
-function mouseDragged(){ if(tiltControl){ let dy=mouseY-pmouseY; tiltFactor+=dy*0.005; tiltFactor=constrain(tiltFactor,0.1,1); }}
+function mouseDragged(){ 
+  if(mouseX>220) { 
+    if(tiltControl){ let dy=mouseY-pmouseY; tiltFactor+=dy*0.005; tiltFactor=constrain(tiltFactor,0.1,1); }
+  }
+}
 </script>
 </body>
 </html>
