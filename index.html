@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Solar System Simulation - Pinch Zoom & Pan</title>
+<title>Solar System Simulation - Planet-Focused Zoom</title>
 <style>
-  html, body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif;}
+  html, body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
   #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;}
   label { display:block; margin: 5px 0; color: #fff;}
   .info-box {
@@ -90,16 +90,14 @@ function draw(){
     ellipse(s.x, s.y, s.r);
   }
 
-  // Smooth pan and zoom
   camX += (targetX - camX) * 0.05;
   camY += (targetY - camY) * 0.05;
   zoomLevel += (targetZoom - zoomLevel) * 0.05;
 
-  // Automatic camera rotation when at default zoom
-  if(abs(targetZoom - 1) < 0.01 && !mouseIsPressed && touches.length == 0){
+  if(abs(targetZoom - 1) < 0.01 && touches.length==0){
     camAngle += 0.001;
-    camX = cos(camAngle) * 0;
-    camY = sin(camAngle) * 0;
+    camX = cos(camAngle)*0;
+    camY = sin(camAngle)*0;
   }
 
   translate(width/2, height/2*0.9);
@@ -112,21 +110,21 @@ function draw(){
   for(let p of planets){
     let t = frameCount * speedMult * (365/p.period) * 0.05;
     p.angle = t;
-    let r = p.a*(1-p.e*p.e)/(1+p.e*cos(p.angle));
+
+    // Apply logarithmic scaling for outer planets
+    let distScale = (p.a > 1000) ? log(p.a)/log(maxOrbit)*maxOrbit : p.a;
+    let r = distScale*(1-p.e*p.e)/(1+p.e*cos(p.angle));
+
     let x = r*cos(p.angle)*scaleFactor;
     let y = r*sin(p.angle)*scaleFactor*tiltFactor;
 
-    // Trails
     trails[p.name].push([x,y]);
     if(trails[p.name].length>trailSlider.value()) trails[p.name].shift();
 
-    // Orbit path
     noFill();
     stroke(255,30);
-    ellipse(0,0,p.a*2*scaleFactor, p.a*2*scaleFactor*tiltFactor);
+    ellipse(0,0,r*2*scaleFactor, r*2*scaleFactor*tiltFactor);
 
-    // Draw trails
-    noFill();
     beginShape();
     for(let i=0;i<trails[p.name].length;i++){
       let alpha = map(i,0,trails[p.name].length,0,255);
@@ -135,34 +133,30 @@ function draw(){
     }
     endShape();
 
-    // Draw planet
     noStroke();
     fill(p.color);
     ellipse(x,y,p.radius*2,p.radius*2);
 
-    // Labels
     fill(255);
     textSize(12/zoomLevel);
     textAlign(CENTER);
     text(p.name, x, y - p.radius*2);
 
-    // Info pop-up and center on planet
-    if(mouseIsPressed){
-      let mx = (mouseX - width/2)/zoomLevel + camX;
-      let my = (mouseY - height/2*0.9)/zoomLevel + camY;
-      let d = dist(mx,my,x,y);
-      if(d<p.radius*2){
-        infoBox.html(`<strong>${p.name}</strong><br>Radius: ${p.radius*1000} km approx<br>Distance: ${p.a} million km<br>Orbital period: ${p.period} days<br>${p.facts}`);
-        infoBox.position(mouseX + 10, mouseY + 10);
-        infoBox.style('display','block');
-        targetX = x; targetY = y; targetZoom = 2;
-      }
+    // Info pop-ups
+    let mx = (mouseX - width/2)/zoomLevel + camX;
+    let my = (mouseY - height/2*0.9)/zoomLevel + camY;
+    let d = dist(mx,my,x,y);
+    if((mouseIsPressed || touches.length==0) && d<p.radius*4){ // larger radius for touch
+      infoBox.html(`<strong>${p.name}</strong><br>Radius: ${p.radius*1000} km approx<br>Distance: ${p.a} million km<br>Orbital period: ${p.period} days<br>${p.facts}`);
+      infoBox.position(mouseX + 10, mouseY + 10);
+      infoBox.style('display','block');
+      targetX = x; targetY = y; targetZoom = 2;
     }
   }
 
   if(!mouseIsPressed){
     infoBox.style('display','none');
-    if(targetZoom > 1.01){
+    if(targetZoom > 1.01 && touches.length==0){
       targetX = 0; targetY = 0; targetZoom = 1;
     }
   }
@@ -179,48 +173,14 @@ function mouseWheel(event){
   targetY = mouseYWorld - (mouseY - height/2*0.9)/targetZoom;
 }
 
-// Pinch zoom + two-finger pan for mobile
-function touchMoved(){
+// Mobile touch controls
+function touchMoved(event){
+  event.preventDefault();
   if(touches.length == 2){
     let d = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
     let midX = (touches[0].x + touches[1].x)/2;
     let midY = (touches[0].y + touches[1].y)/2;
 
     if(lastDist > 0){
-      // Pinch zoom
       let factor = 1 + (d - lastDist)*0.002;
-      let worldX = (midX - width/2)/zoomLevel + camX;
-      let worldY = (midY - height/2*0.9)/zoomLevel + camY;
-      targetZoom *= factor;
-      targetZoom = constrain(targetZoom, 0.2, 5);
-      targetX = worldX - (midX - width/2)/targetZoom;
-      targetY = worldY - (midY - height/2*0.9)/targetZoom;
-
-      // Two-finger pan
-      let dx = (midX - lastMidX)/zoomLevel;
-      let dy = (midY - lastMidY)/zoomLevel;
-      targetX -= dx;
-      targetY -= dy;
-
-      // Tilt control
-      if(tiltControl){
-        let dyTilt = (midY - lastMidY);
-        tiltFactor += dyTilt*0.005;
-        tiltFactor = constrain(tiltFactor, 0.1, 1);
-      }
-    }
-    lastDist = d;
-    lastMidX = midX;
-    lastMidY = midY;
-    return false;
-  }
-}
-
-function touchEnded(){ 
-  lastDist = 0; 
-  lastMidX = 0;
-  lastMidY = 0;
-}
-</script>
-</body>
-</html>
+      let worldX = (mid
