@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Solar System Simulation v8.5</title>
+<title>Solar System Simulation v8.6</title>
 <style>
 html, body { margin:0; padding:0; overflow:hidden; background:#000; font-family:sans-serif; touch-action:none; }
 #ui { position:absolute; top:10px; left:10px; z-index:100; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; color:#fff; width:220px;}
@@ -22,7 +22,7 @@ button{display:block; margin-top:5px; width:100%;}
   <button id="toggleTilt">Tilt OFF (Pan ON)</button>
   <button id="resetView">Reset View</button>
 </div>
-<div id="versionLabel">v8.5</div>
+<div id="versionLabel">v8.6</div>
 <div id="compressionLabel"></div>
 <div id="infoBox" class="info-box"></div>
 
@@ -42,12 +42,12 @@ let planets=[
 
 let trails={}, speedSlider, distSlider, trailSlider;
 let stars=[];
-let camX=0, camY=0, targetX=0, targetY=0, zoomLevel=1, targetZoom=1;
+let camera={x:0,y:0,zoom:1};
+let targetCamera={x:0,y:0,zoom:1};
 let tiltFactor=0.5, tiltControl=false;
-let lastDist=0, lastMidX=0, lastMidY=0;
 let infoBox, compressionLabel;
 let maxOrbit;
-let isDragging=false, dragStartX=0, dragStartY=0, camStartX=0, camStartY=0;
+let isDragging=false, dragStart={x:0,y:0}, camStart={x:0,y:0};
 
 function setup(){
   createCanvas(windowWidth, windowHeight);
@@ -70,26 +70,28 @@ function toggleTilt(){
   select('#toggleTilt').html(tiltControl ? 'Tilt ON' : 'Tilt OFF (Pan ON)');
 }
 
-function windowResized(){resizeCanvas(windowWidth,windowHeight);}
-function resetView(){ targetX=0; targetY=0; targetZoom=1; tiltFactor=0.5; }
+function resetView(){ targetCamera={x:0,y:0,zoom:1}; tiltFactor=0.5; }
+
+function windowResized(){ resizeCanvas(windowWidth, windowHeight); }
 
 function draw(){
   background(0);
   noStroke(); fill(255);
   for(let s of stars) ellipse(s.x,s.y,s.r);
 
-  camX += (targetX - camX)*0.05;
-  camY += (targetY - camY)*0.05;
-  zoomLevel += (targetZoom - zoomLevel)*0.05;
+  // Smooth camera motion
+  camera.x += (targetCamera.x - camera.x)*0.1;
+  camera.y += (targetCamera.y - camera.y)*0.1;
+  camera.zoom += (targetCamera.zoom - camera.zoom)*0.1;
 
+  push();
   translate(width/2, height/2*0.9);
-  scale(zoomLevel);
-  translate(-camX, -camY);
+  scale(camera.zoom);
+  translate(-camera.x, -camera.y);
 
   let speedMult=speedSlider.value()/5;
   let compression=distSlider.value();
   let trailLength=trailSlider.value();
-
   let scaleFactor=min(width,height)/2 / maxOrbit * compression;
   compressionLabel.html(`Distance compression: ${compression.toFixed(2)}x`);
 
@@ -117,14 +119,16 @@ function draw(){
     noStroke(); fill(p.color);
     ellipse(x,y,p.radius*2,p.radius*2);
 
-    fill(255); textSize(12/zoomLevel); textAlign(CENTER);
+    fill(255); textSize(12/camera.zoom); textAlign(CENTER);
     text(p.name,x,y-p.radius*2);
 
-    let mx=(mouseX-width/2)/zoomLevel+camX;
-    let my=(mouseY-height/2*0.9)/zoomLevel+camY;
-    if(dist(mx,my,x,y)<p.radius*4){ hoverPlanet=p; }
+    let mx=(mouseX-width/2)/camera.zoom+camera.x;
+    let my=(mouseY-height/2*0.9)/camera.zoom+camera.y;
+    if(dist(mx,my,x,y)<p.radius*4) hoverPlanet=p;
   }
+  pop();
 
+  // Hover info box
   if(hoverPlanet){
     infoBox.html(`<strong>${hoverPlanet.name}</strong><br>Radius: ${hoverPlanet.radius*1000} km approx<br>Distance: ${hoverPlanet.a} million km<br>Orbital period: ${hoverPlanet.period} days<br>${hoverPlanet.facts}`);
     infoBox.position(mouseX+10, mouseY+10);
@@ -134,43 +138,43 @@ function draw(){
 
 // Mouse wheel zoom
 function mouseWheel(event){
-  if(mouseX>220) return; // ignore UI
-  let zoomChange=(event.delta>0)?0.95:1.05;
-  let mouseXWorld=(mouseX-width/2)/zoomLevel+camX;
-  let mouseYWorld=(mouseY-height/2*0.9)/zoomLevel+camY;
-  targetZoom*=zoomChange;
-  targetZoom=constrain(targetZoom,0.2,5);
-  targetX=mouseXWorld-(mouseX-width/2)/targetZoom;
-  targetY=mouseYWorld-(mouseY-height/2*0.9)/targetZoom;
+  if(mouseX<220){ // Ignore UI
+    let factor = (event.delta>0)?0.95:1.05;
+    let worldX=(mouseX-width/2)/camera.zoom + camera.x;
+    let worldY=(mouseY-height/2*0.9)/camera.zoom + camera.y;
+    targetCamera.zoom *= factor;
+    targetCamera.zoom=constrain(targetCamera.zoom,0.2,5);
+    targetCamera.x=worldX-(mouseX-width/2)/targetCamera.zoom;
+    targetCamera.y=worldY-(mouseY-height/2*0.9)/targetCamera.zoom;
+  }
 }
 
 // Dragging / tilt
 function mousePressed(){
-  if(mouseX>220) return; // ignore UI
+  if(mouseX>220) return;
   isDragging=true;
-  dragStartX=mouseX;
-  dragStartY=mouseY;
-  camStartX=targetX;
-  camStartY=targetY;
+  dragStart={x:mouseX, y:mouseY};
+  camStart={x:targetCamera.x, y:targetCamera.y};
 }
 
 function mouseDragged(){
   if(mouseX>220) return;
   if(!isDragging) return;
-  let dx=(mouseX-dragStartX)/zoomLevel;
-  let dy=(mouseY-dragStartY)/zoomLevel;
+  let dx=(mouseX-dragStart.x)/camera.zoom;
+  let dy=(mouseY-dragStart.y)/camera.zoom;
   if(tiltControl){
     tiltFactor+=dy*0.005;
     tiltFactor=constrain(tiltFactor,0.1,1);
   } else {
-    targetX=camStartX-dx;
-    targetY=camStartY-dy;
+    targetCamera.x=camStart.x-dx;
+    targetCamera.y=camStart.y-dy;
   }
 }
 
 function mouseReleased(){ isDragging=false; }
 
 // Touch controls
+let lastDist=0;
 function touchMoved(event){
   event.preventDefault();
   if(touches.length==2){
@@ -179,14 +183,14 @@ function touchMoved(event){
     let midY=(touches[0].y+touches[1].y)/2;
     if(lastDist>0){
       let factor = 1 + (d - lastDist)*0.002;
-      let worldX=(midX-width/2)/zoomLevel+camX;
-      let worldY=(midY-height/2*0.9)/zoomLevel+camY;
-      targetZoom*=factor;
-      targetZoom=constrain(targetZoom,0.2,5);
-      targetX=worldX-(midX-width/2)/targetZoom;
-      targetY=worldY-(midY-height/2*0.9)/targetZoom;
+      let worldX=(midX-width/2)/camera.zoom+camera.x;
+      let worldY=(midY-height/2*0.9)/camera.zoom+camera.y;
+      targetCamera.zoom*=factor;
+      targetCamera.zoom=constrain(targetCamera.zoom,0.2,5);
+      targetCamera.x=worldX-(midX-width/2)/targetCamera.zoom;
+      targetCamera.y=worldY-(midY-height/2*0.9)/targetCamera.zoom;
     }
-    lastDist=d; lastMidX=midX; lastMidY=midY;
+    lastDist=d;
   } else if(touches.length==1){
     let dx=touches[0].x-pmouseX;
     let dy=touches[0].y-pmouseY;
@@ -194,13 +198,12 @@ function touchMoved(event){
       tiltFactor+=dy*0.005;
       tiltFactor=constrain(tiltFactor,0.1,1);
     } else {
-      targetX-=dx/zoomLevel; targetY-=dy/zoomLevel;
+      targetCamera.x-=dx/camera.zoom; 
+      targetCamera.y-=dy/camera.zoom;
     }
   }
 }
-function touchEnded(){ lastDist=0; lastMidX=0; lastMidY=0; }
-
+function touchEnded(){ lastDist=0; }
 </script>
 </body>
 </html>
-
